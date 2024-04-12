@@ -289,7 +289,17 @@ class QWenLMHeadModel(nn.Module):
                                         default_weight_loader)
                 weight_loader(param, loaded_weight)
 
-    
+
+class QWenPreferenceModel(QWenLMHeadModel):
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        linear_method: Optional[LinearMethodBase] = None,
+    ):
+        super().__init__(config, linear_method)
+        self.project = torch.nn.Linear(config.hidden_size, 1, bias=False)
+        self.project.weight.data.normal_(mean=0.0, std=config.initializer_range)
+
     def forward(
         self,
         input_ids: torch.Tensor,
