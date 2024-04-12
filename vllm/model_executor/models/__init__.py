@@ -53,6 +53,7 @@ _MODELS = {
     "StableLmForCausalLM": ("stablelm", "StablelmForCausalLM"),
     "Starcoder2ForCausalLM": ("starcoder2", "Starcoder2ForCausalLM"),
     "XverseForCausalLM": ("xverse", "XverseForCausalLM"),
+    "QWenPreferenceModel": ("qwen", "QWenPreferenceModel"),
 }
 
 # Models not supported by ROCm.

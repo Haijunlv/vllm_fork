@@ -288,3 +288,22 @@ class QWenLMHeadModel(nn.Module):
                 weight_loader = getattr(param, "weight_loader",
                                         default_weight_loader)
                 weight_loader(param, loaded_weight)
+
+    
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        kv_caches: List[torch.Tensor],
+        attn_metadata: AttentionMetadata,
+    ) -> torch.Tensor:
+        hidden_states = self.transformer(input_ids, positions, kv_caches,
+                                        attn_metadata)
+        # (B, L, hidden_size)
+        hidden_states = hidden_states[0]
+
+        if self.project.weight.dtype != hidden_states.dtype:
+            self.project.weight.data = self.project.weight.data.to(hidden_states.dtype)
+        pref_logits = self.project(hidden_states[:,-1,:]).view(-1)
+
+        return pref_logits
