@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 
+from vllm.config import CacheConfig
 from vllm.model_executor.layers.rejection_sampler import RejectionSampler
 from vllm.sequence import (SamplerOutput, SequenceGroupMetadata,
                            SequenceGroupOutput, SequenceOutput)
@@ -14,10 +15,9 @@ from vllm.spec_decode.multi_step_worker import MultiStepWorker
 from vllm.spec_decode.util import (get_all_seq_ids, nvtx_range,
                                    split_batch_by_proposal_len)
 from vllm.worker.worker import Worker
-from vllm.worker.worker_base import LoraNotSupportedWorkerBase
 
 
-class SpecDecodeWorker(LoraNotSupportedWorkerBase):
+class SpecDecodeWorker:
     """Worker which implements speculative decoding.
 
     Speculative decoding reduces decoding per-token latency by using a proposal
@@ -94,7 +94,10 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
             device=self.device,
             vocab_size=self._vocab_size)
 
-    def determine_num_available_blocks(self) -> Tuple[int, int]:
+    def profile_num_available_blocks(self, block_size: int,
+                                     gpu_memory_utilization: float,
+                                     cpu_swap_space: int,
+                                     cache_dtype: str) -> Tuple[int, int]:
         """Determine the number of cache blocks to use.
 
         This is done by profiling the scorer model (which is typically the
@@ -103,26 +106,27 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         such that the number of blocks is equal in both KV caches.
         """
         num_gpu_blocks, num_cpu_blocks = (
-            self.scorer_worker.determine_num_available_blocks())
+            self.scorer_worker.profile_num_available_blocks(
+                block_size, gpu_memory_utilization, cpu_swap_space,
+                cache_dtype))
 
         scorer_cache_block_size_bytes = (
-            self.scorer_worker.get_cache_block_size_bytes())
+            self.scorer_worker.get_cache_block_size_bytes(
+                block_size, cache_dtype))
         proposer_cache_block_size_bytes = (
-            self.proposer_worker.get_cache_block_size_bytes())
+            self.proposer_worker.get_cache_block_size_bytes(
+                block_size, cache_dtype))
 
         new_num_gpu_blocks = split_num_cache_blocks_evenly(
             scorer_cache_block_size_bytes, proposer_cache_block_size_bytes,
             num_gpu_blocks)
         return new_num_gpu_blocks, num_cpu_blocks
 
-    def initialize_cache(self, num_gpu_blocks: int,
-                         num_cpu_blocks: int) -> None:
+    def init_cache_engine(self, cache_config: CacheConfig):
         """Initialize the cache engine of the scorer and proposer workers.
         """
-        self.scorer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
-                                            num_cpu_blocks=num_cpu_blocks)
-        self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
-                                              num_cpu_blocks=num_cpu_blocks)
+        self.scorer_worker.init_cache_engine(cache_config)
+        self.proposer_worker.init_cache_engine(cache_config)
 
     @torch.inference_mode()
     def execute_model(
@@ -346,16 +350,6 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
     @property
     def device(self):
         return self.scorer_worker.device
-
-    def get_cache_block_size_bytes(self):
-        """Return the size of a cache block in bytes.
-        
-        This function is only used to compose workers within a SpecDecodeWorker.
-        We leave composing a SpecDecodeWorker within a SpecDecodeWorker
-        undefined for now, although it could be implemented in the future.
-        See https://arxiv.org/abs/2308.04623.
-        """
-        raise NotImplementedError
 
 
 def split_num_cache_blocks_evenly(scorer_cache_block_size_bytes: int,

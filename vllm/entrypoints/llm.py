@@ -174,8 +174,7 @@ class LLM:
             prompt_token_ids)
         for i in range(num_requests):
             prompt = prompts[i] if prompts is not None else None
-            token_ids = None if prompt_token_ids is None else prompt_token_ids[
-                i]
+            token_ids = None if prompt_token_ids is None else prompt_token_ids[i]
             self._add_request(
                 prompt,
                 sampling_params,
@@ -213,18 +212,29 @@ class LLM:
                         desc="Processed prompts",
                         dynamic_ncols=True)
         # Run the engine.
+        PREF_TASK = False
         outputs: List[RequestOutput] = []
         while self.llm_engine.has_unfinished_requests():
+            # @YIKUN: keep rolling here, something goes wrong.
             step_outputs = self.llm_engine.step()
+
+            if isinstance(step_outputs, tuple):
+                step_outputs = zip(*step_outputs)
+                PREF_TASK = True
+
             for output in step_outputs:
-                if output.finished:
+                if (not PREF_TASK and output.finished) or (PREF_TASK and output[1].finished):
                     outputs.append(output)
                     if use_tqdm:
                         pbar.update(1)
+
         if use_tqdm:
             pbar.close()
         # Sort the outputs by request ID.
         # This is necessary because some requests may be finished earlier than
         # its previous requests.
-        outputs = sorted(outputs, key=lambda x: int(x.request_id))
+        if PREF_TASK:
+            outputs = sorted(outputs, key=lambda x: int(x[1].request_id))
+        else:
+            outputs = sorted(outputs, key=lambda x: int(x.request_id))
         return outputs

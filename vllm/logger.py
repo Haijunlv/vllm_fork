@@ -4,7 +4,6 @@
 import logging
 import os
 import sys
-from typing import Optional
 
 VLLM_CONFIGURE_LOGGING = int(os.getenv("VLLM_CONFIGURE_LOGGING", "1"))
 
@@ -27,7 +26,7 @@ class NewLineFormatter(logging.Formatter):
 
 
 _root_logger = logging.getLogger("vllm")
-_default_handler: Optional[logging.Handler] = None
+_default_handler = None
 
 
 def _setup_logger():
@@ -56,12 +55,7 @@ def init_logger(name: str):
     # Use the same settings as above for root logger
     logger = logging.getLogger(name)
     logger.setLevel(os.getenv("LOG_LEVEL", "DEBUG"))
-
     if VLLM_CONFIGURE_LOGGING:
-        if _default_handler is None:
-            raise ValueError(
-                "_default_handler is not set up. This should never happen!"
-                " Please open an issue on Github.")
         logger.addHandler(_default_handler)
         logger.propagate = False
     return logger

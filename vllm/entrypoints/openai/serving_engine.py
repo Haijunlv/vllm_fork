@@ -2,9 +2,7 @@ import asyncio
 import json
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Dict, List, Optional, Tuple, Union
-
-from pydantic import conint
+from typing import Dict, List, Optional, Union
 
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.entrypoints.openai.protocol import (ChatCompletionRequest,
@@ -68,8 +66,7 @@ class OpenAIServing:
         self.tokenizer = get_tokenizer(
             engine_model_config.tokenizer,
             tokenizer_mode=engine_model_config.tokenizer_mode,
-            trust_remote_code=engine_model_config.trust_remote_code,
-            truncation_side="left")
+            trust_remote_code=engine_model_config.trust_remote_code)
 
     async def show_available_models(self) -> ModelList:
         """Show available models. Right now we only have one model."""
@@ -99,32 +96,27 @@ class OpenAIServing:
         last_token_len = 0
         if num_output_top_logprobs:
             logprobs.top_logprobs = []
-
         for i, token_id in enumerate(token_ids):
             step_top_logprobs = top_logprobs[i]
-            if step_top_logprobs is None:
-                token = self.tokenizer.decode(token_id)
-                logprobs.tokens.append(token)
-                logprobs.token_logprobs.append(None)
-                logprobs.top_logprobs.append(None)
-            else:
+            if step_top_logprobs is not None:
                 token_logprob = step_top_logprobs[token_id].logprob
-                token = step_top_logprobs[token_id].decoded_token
-                logprobs.tokens.append(token)
-                logprobs.token_logprobs.append(token_logprob)
-
-                if num_output_top_logprobs:
-                    logprobs.top_logprobs.append({
-                        p.decoded_token: p.logprob
-                        for i, p in step_top_logprobs.items()
-                    } if step_top_logprobs else None)
-
+            else:
+                token_logprob = None
+            token = step_top_logprobs[token_id].decoded_token
+            logprobs.tokens.append(token)
+            logprobs.token_logprobs.append(token_logprob)
             if len(logprobs.text_offset) == 0:
                 logprobs.text_offset.append(initial_text_offset)
             else:
                 logprobs.text_offset.append(logprobs.text_offset[-1] +
                                             last_token_len)
             last_token_len = len(token)
+
+            if num_output_top_logprobs:
+                logprobs.top_logprobs.append({
+                    p.decoded_token: p.logprob
+                    for i, p in step_top_logprobs.items()
+                } if step_top_logprobs else None)
         return logprobs
 
     def create_error_response(
@@ -169,31 +161,18 @@ class OpenAIServing:
         raise ValueError("The model `{request.model}` does not exist.")
 
     def _validate_prompt_and_tokenize(
-        self,
-        request: Union[ChatCompletionRequest, CompletionRequest],
-        prompt: Optional[str] = None,
-        prompt_ids: Optional[List[int]] = None,
-        truncate_prompt_tokens: Optional[conint(ge=1)] = None
-    ) -> Tuple[List[int], str]:
+            self,
+            request: Union[ChatCompletionRequest, CompletionRequest],
+            prompt: Optional[str] = None,
+            prompt_ids: Optional[List[int]] = None) -> List[int]:
         if not (prompt or prompt_ids):
             raise ValueError("Either prompt or prompt_ids should be provided.")
         if (prompt and prompt_ids):
             raise ValueError(
                 "Only one of prompt or prompt_ids should be provided.")
 
-        if prompt_ids is None:
-            tokenizer_kwargs = {} if truncate_prompt_tokens is None else {
-                "truncation": True,
-                "max_length": truncate_prompt_tokens,
-            }
-            input_ids = self.tokenizer(prompt, **tokenizer_kwargs).input_ids
-        elif truncate_prompt_tokens is not None:
-            input_ids = prompt_ids[-truncate_prompt_tokens:]
-        else:
-            input_ids = prompt_ids
-
-        input_text = prompt if prompt is not None else self.tokenizer.decode(
-            prompt_ids)
+        input_ids = prompt_ids if prompt_ids is not None else self.tokenizer(
+            prompt).input_ids
         token_num = len(input_ids)
 
         if request.max_tokens is None:
@@ -208,4 +187,4 @@ class OpenAIServing:
                 f"{request.max_tokens} in the completion). "
                 f"Please reduce the length of the messages or completion.", )
         else:
-            return input_ids, input_text
+            return input_ids
