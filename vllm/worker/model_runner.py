@@ -674,6 +674,25 @@ class ModelRunner:
             logits=logits,
             sampling_metadata=sampling_metadata,
         )
+        # ---- 4.18 debug for vllm preference v1.0 acceleration ---- #
+        # OUTPUT = False
+        # import pdb; pdb.set_trace()
+        # if OUTPUT:
+        #     seq_start_loc = attn_metadata.seq_start_loc
+        #     prompt_lens_tensor = torch.clip(attn_metadata.prompt_lens_tensor, 0, 512)
+        #     seq_start_loc = seq_start_loc[:-1]
+        #     first_hidden_states = hidden_states[seq_start_loc]
+        #     pooled_hidden_states = hidden_states[seq_start_loc + prompt_lens_tensor - 1]
+
+        #     print(first_hidden_states.mean(dim=-1))
+        #     print(first_hidden_states.std(dim=-1))
+        #     print(first_hidden_states)
+
+        #     print(pooled_hidden_states.mean(dim=-1))
+        #     print(pooled_hidden_states.std(dim=-1))
+        #     print(pooled_hidden_states)
+        #     # import pdb; pdb.set_trace()
+
         return output
 
     @torch.inference_mode()

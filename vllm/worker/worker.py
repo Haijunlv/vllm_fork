@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import torch
 import torch.distributed
-
+from vllm.utils import get_distributed_init_method, get_ip
 from vllm.config import (CacheConfig, DeviceConfig, LoRAConfig, ModelConfig,
                          ParallelConfig, SchedulerConfig, VisionLanguageConfig)
 from vllm.lora.request import LoRARequest
@@ -19,7 +19,7 @@ from vllm.model_executor.parallel_utils.parallel_state import (
 from vllm.sequence import SamplerOutput, SequenceGroupMetadata
 from vllm.worker.cache_engine import CacheEngine
 from vllm.worker.model_runner import ModelRunner
-
+import os
 
 class Worker:
     """A worker class that executes (a partition of) the model on a GPU.
@@ -97,9 +97,16 @@ class Worker:
             raise RuntimeError(
                 f"Not support device type: {self.device_config.device}")
         # Initialize the distributed environment.
+        master_port = None
+        if os.environ.get("MASTER_PORT", None):
+            master_port = os.environ.get("MASTER_PORT", None)
+            self.distributed_init_method = get_distributed_init_method(
+                get_ip(), master_port)
+        print(f"distributed_init_method:{self.distributed_init_method}, rank:{self.rank}, self.local_rank:{self.local_rank}, master_port:{master_port}")
         init_distributed_environment(self.parallel_config, self.rank,
                                      self.distributed_init_method,
                                      self.local_rank)
+        print(f"after init_distributed_environment")
         # Set random seed.
         set_random_seed(self.model_config.seed)
 

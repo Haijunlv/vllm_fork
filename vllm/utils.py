@@ -180,9 +180,10 @@ def make_async(func: Callable[..., T]) -> Callable[..., Awaitable[T]]:
 
 
 def get_ip() -> str:
-    host_ip = os.environ.get("HOST_IP")
-    if host_ip:
-        return host_ip
+    # host_ip = os.environ.get("HOST_IP")
+    # print(f"host_ip:{host_ip}")
+    # if host_ip:
+    #     return host_ip
 
     # IP is not set, try to get it from the network interface
 

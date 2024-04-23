@@ -1,4 +1,5 @@
 import time
+import torch
 from typing import Iterable, List, Optional, Tuple, Type, Union
 
 from transformers import PreTrainedTokenizer
@@ -418,6 +419,8 @@ class LLMEngine:
                                         outputs: SequenceGroupOutput) -> None:
 
         # Process prompt logprobs
+        # @YIKUN: This is the only place where prompt logprobs are processed
+        # Maybe we need to mock some values in the `sample` method
         prompt_logprobs = outputs.prompt_logprobs
         if prompt_logprobs is not None:
             self.detokenizer.decode_prompt_logprobs_inplace(
@@ -680,7 +683,13 @@ class LLMEngine:
         else:
             output = []
 
-        return self._process_model_outputs(output, scheduler_outputs)
+        # @YIKUN: This is the only place where prompt logprobs are processed
+        if isinstance(output, tuple):
+            logits_output, sampler_output = output
+            results = (logits_output, self._process_model_outputs(sampler_output, scheduler_outputs))
+            return results
+        else:
+            return self._process_model_outputs(output, scheduler_outputs)
 
     def do_log_stats(self) -> None:
         """Forced log when no requests active."""

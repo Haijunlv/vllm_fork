@@ -236,6 +236,9 @@ class QWenLMHeadModel(nn.Module):
         kv_caches: List[torch.Tensor],
         attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
+        print(attn_metadata)
+        print(input_ids.shape)
+        # --- @YIKUN: 4.18 for InternLM Preference vllm acceleration (IPVA project) debugging --- #
         hidden_states = self.transformer(input_ids, positions, kv_caches,
                                          attn_metadata)
         return hidden_states
@@ -288,32 +291,3 @@ class QWenLMHeadModel(nn.Module):
                 weight_loader = getattr(param, "weight_loader",
                                         default_weight_loader)
                 weight_loader(param, loaded_weight)
-
-
-class QWenPreferenceModel(QWenLMHeadModel):
-    def __init__(
-        self,
-        config: PretrainedConfig,
-        linear_method: Optional[LinearMethodBase] = None,
-    ):
-        super().__init__(config, linear_method)
-        self.project = torch.nn.Linear(config.hidden_size, 1, bias=False)
-        self.project.weight.data.normal_(mean=0.0, std=config.initializer_range)
-
-    def forward(
-        self,
-        input_ids: torch.Tensor,
-        positions: torch.Tensor,
-        kv_caches: List[torch.Tensor],
-        attn_metadata: AttentionMetadata,
-    ) -> torch.Tensor:
-        hidden_states = self.transformer(input_ids, positions, kv_caches,
-                                        attn_metadata)
-        # (B, L, hidden_size)
-        hidden_states = hidden_states[0]
-
-        if self.project.weight.dtype != hidden_states.dtype:
-            self.project.weight.data = self.project.weight.data.to(hidden_states.dtype)
-        pref_logits = self.project(hidden_states[:,-1,:]).view(-1)
-
-        return pref_logits

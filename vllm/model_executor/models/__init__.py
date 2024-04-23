@@ -29,6 +29,7 @@ _MODELS = {
     "GPTNeoXForCausalLM": ("gpt_neox", "GPTNeoXForCausalLM"),
     "InternLMForCausalLM": ("llama", "LlamaForCausalLM"),
     "InternLM2ForCausalLM": ("internlm2", "InternLM2ForCausalLM"),
+    "InternLM2ForSequenceClassification": ("internlm2", "InternLM2ForSequenceClassification"),
     "JAISLMHeadModel": ("jais", "JAISLMHeadModel"),
     "LlamaForCausalLM": ("llama", "LlamaForCausalLM"),
     "LlavaForConditionalGeneration":
@@ -53,7 +54,6 @@ _MODELS = {
     "StableLmForCausalLM": ("stablelm", "StablelmForCausalLM"),
     "Starcoder2ForCausalLM": ("starcoder2", "Starcoder2ForCausalLM"),
     "XverseForCausalLM": ("xverse", "XverseForCausalLM"),
-    "QWenPreferenceModel": ("qwen", "QWenPreferenceModel"),
 }
 
 # Models not supported by ROCm.

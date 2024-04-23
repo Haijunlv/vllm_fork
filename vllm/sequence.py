@@ -4,6 +4,7 @@ import enum
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
+import torch
 from vllm.block import LogicalTokenBlock
 from vllm.lora.request import LoRARequest
 from vllm.sampling_params import SamplingParams
@@ -576,10 +577,12 @@ class SequenceOutput:
         parent_seq_id: int,
         output_token: int,
         logprobs: Dict[int, Logprob],
+        logits: list|int = None,
     ) -> None:
         self.parent_seq_id = parent_seq_id
         self.output_token = output_token
         self.logprobs = logprobs
+        self.logits = logits
 
     def __repr__(self) -> str:
         return (f"SequenceOutput(parent_seq_id={self.parent_seq_id}, "
@@ -602,9 +605,11 @@ class SequenceGroupOutput:
         self,
         samples: List[SequenceOutput],
         prompt_logprobs: Optional[PromptLogprobs],
+        logits: Optional[torch.Tensor] = None,
     ) -> None:
         self.samples = samples
         self.prompt_logprobs = prompt_logprobs
+        self.logits = logits
 
     def __repr__(self) -> str:
         return (f"SequenceGroupOutput(samples={self.samples}, "
