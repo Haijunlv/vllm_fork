@@ -47,6 +47,7 @@ _MODELS = {
     "OrionForCausalLM": ("orion", "OrionForCausalLM"),
     "PhiForCausalLM": ("phi", "PhiForCausalLM"),
     "QWenLMHeadModel": ("qwen", "QWenLMHeadModel"),
+    "QWenPreferenceModel": ("qwen", "QWenPreferenceModel"),
     "Qwen2ForCausalLM": ("qwen2", "Qwen2ForCausalLM"),
     "Qwen2MoeForCausalLM": ("qwen2_moe", "Qwen2MoeForCausalLM"),
     "RWForCausalLM": ("falcon", "FalconForCausalLM"),
