@@ -38,7 +38,7 @@ from vllm.model_executor.layers.linear import (LinearMethodBase,
                                                RowParallelLinear)
 from vllm.model_executor.layers.logits_processor import LogitsProcessor
 from vllm.model_executor.layers.rotary_embedding import get_rope
-from vllm.model_executor.layers.sampler import Sampler
+from vllm.model_executor.layers.sampler import Sampler, MockSampler
 from vllm.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead, VocabParallelEmbedding)
 from vllm.model_executor.parallel_utils.parallel_state import (
@@ -371,3 +371,124 @@ class Qwen2ForCausalLM(nn.Module):
                 weight_loader = getattr(param, "weight_loader",
                                         default_weight_loader)
                 weight_loader(param, loaded_weight)
+
+
+class Qwen2ForSequenceClassification(nn.Module):
+    packed_modules_mapping = {
+        "qkv_proj": [
+            "q_proj",
+            "k_proj",
+            "v_proj",
+        ],
+        "gate_up_proj": [
+            "gate_proj",
+            "up_proj",
+        ],
+    }
+
+    # LoRA specific attributes
+    supported_lora_modules = [
+        "qkv_proj",
+        "o_proj",
+        "gate_up_proj",
+        "down_proj",
+    ]
+    embedding_modules = {}
+    embedding_padding_modules = []
+
+    def __init__(
+        self,
+        config: Qwen2Config,
+        linear_method: Optional[LinearMethodBase] = None,
+        lora_config: Optional[LoRAConfig] = None,
+    ) -> None:
+        del lora_config
+        super().__init__()
+        self.config = config
+        self.linear_method = linear_method
+        self.num_labels = config.num_labels
+        self.model = Qwen2Model(config, linear_method)
+        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+
+        self.logits_processor = LogitsProcessor(1)
+        self.preference_max_length = 4096
+        self.sampler = MockSampler()
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        kv_caches: List[torch.Tensor],
+        attn_metadata: AttentionMetadata,
+    ) -> torch.Tensor:
+        hidden_states = self.model(input_ids, positions, kv_caches,
+                                   attn_metadata)
+        self.subquery_start_loc = attn_metadata.subquery_start_loc
+        self.prompt_lens = attn_metadata.prompt_lens
+        if isinstance(self.prompt_lens, list):
+            self.prompt_lens = torch.tensor(self.prompt_lens, device=hidden_states.device, dtype=torch.long)
+            self.prompt_lens = torch.clip(self.prompt_lens, 0, self.preference_max_length)
+        else:
+            self.prompt_lens = None
+        return hidden_states
+
+    def compute_logits(self, hidden_states: torch.Tensor,
+                       sampling_metadata: SamplingMetadata) -> torch.Tensor:
+        if (self.prompt_lens is not None) and self.prompt_lens.dtype == torch.long:
+            self.last_selected_idxs = self.subquery_start_loc[:-1] + self.prompt_lens - 1
+            selected_hidden_states = hidden_states[self.last_selected_idxs]
+            self.prompt_lens = None 
+        else:
+            # mock run
+            selected_hidden_states = hidden_states[:20]
+        logits = self.score(selected_hidden_states)
+        return logits
+
+    def sample(
+        self,
+        logits: torch.Tensor,
+        sampling_metadata: SamplingMetadata,
+    ) -> Optional[SamplerOutput]:
+        logits_res = logits.cpu().tolist()
+        return logits_res, self.sampler(logits, sampling_metadata)
+
+    def load_weights(self,
+                     model_name_or_path: str,
+                     cache_dir: Optional[str] = None,
+                     load_format: str = "auto",
+                     revision: Optional[str] = None):
+        stacked_params_mapping = [
+            # (param_name, shard_name, shard_id)
+            ("qkv_proj", "q_proj", "q"),
+            ("qkv_proj", "k_proj", "k"),
+            ("qkv_proj", "v_proj", "v"),
+            ("gate_up_proj", "gate_proj", 0),
+            ("gate_up_proj", "up_proj", 1),
+        ]
+        params_dict = dict(self.named_parameters(remove_duplicate=False))
+        for name, loaded_weight in hf_model_weights_iterator(
+                model_name_or_path, cache_dir, load_format, revision):
+            if "rotary_emb.inv_freq" in name:
+                continue
+            if self.config.tie_word_embeddings and "lm_head.weight" in name:
+                continue
+            for (param_name, weight_name, shard_id) in stacked_params_mapping:
+                if weight_name not in name:
+                    continue
+                name = name.replace(weight_name, param_name)
+                # Skip loading extra bias for GPTQ models.
+                if name.endswith(".bias") and name not in params_dict:
+                    continue
+                param = params_dict[name]
+                weight_loader = param.weight_loader
+                weight_loader(param, loaded_weight, shard_id)
+                break
+            else:
+                # Skip loading extra bias for GPTQ models.
+                if name.endswith(".bias") and name not in params_dict:
+                    continue
+                param = params_dict[name]
+                weight_loader = getattr(param, "weight_loader",
+                                        default_weight_loader)
+                weight_loader(param, loaded_weight)
+

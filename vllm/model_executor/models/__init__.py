@@ -49,6 +49,7 @@ _MODELS = {
     "QWenLMHeadModel": ("qwen", "QWenLMHeadModel"),
     "QWenPreferenceModel": ("qwen", "QWenPreferenceModel"),
     "Qwen2ForCausalLM": ("qwen2", "Qwen2ForCausalLM"),
+    "Qwen2ForSequenceClassification": ("qwen2", "Qwen2ForSequenceClassification"),
     "Qwen2MoeForCausalLM": ("qwen2_moe", "Qwen2MoeForCausalLM"),
     "RWForCausalLM": ("falcon", "FalconForCausalLM"),
     "StableLMEpochForCausalLM": ("stablelm", "StablelmForCausalLM"),
